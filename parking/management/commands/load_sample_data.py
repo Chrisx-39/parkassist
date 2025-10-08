@@ -4,7 +4,7 @@ from django.utils import timezone
 import random
 
 class Command(BaseCommand):
-    help = "Load realistic sample parking areas, levels, slots, and statuses."
+    help = "Load realistic sample parking areas, levels, slots, and statuses for Avondale Shops (Harare)."
 
     def handle(self, *args, **kwargs):
         # Clear existing data
@@ -13,29 +13,36 @@ class Command(BaseCommand):
         GarageLevel.objects.all().delete()
         ParkingArea.objects.all().delete()
 
-        self.stdout.write("🚗 Loading realistic parking data...")
+        self.stdout.write("🚗 Loading Avondale Shops parking data...")
 
-        # Define realistic areas
+        # --- Avondale Shops realistic parking zones ---
         areas = [
             {
-                "name": "Central Garage",
-                "total_capacity": 40,
-                "area_type": "garage",
-                "center": (-17.8290, 31.0520),
-                "levels": ["B1", "L1", "L2"],
-            },
-            {
-                "name": "Main Street Lot",
-                "total_capacity": 25,
+                "name": "Avondale Mall Parking",
+                "total_capacity": 80,
                 "area_type": "lot",
-                "center": (-17.8285, 31.0505),
-                "levels": [],
+                "center": (-17.7978, 31.0384),
+                "levels": [],  # open-air
             },
             {
-                "name": "Downtown Street Parking",
-                "total_capacity": 15,
+                "name": "Food Lovers Underground Parking",
+                "total_capacity": 45,
+                "area_type": "garage",
+                "center": (-17.7982, 31.0389),
+                "levels": ["B1"],  # single basement level
+            },
+            {
+                "name": "King George Street Parking",
+                "total_capacity": 30,
                 "area_type": "street",
-                "center": (-17.8270, 31.0540),
+                "center": (-17.7971, 31.0375),
+                "levels": [],  # roadside
+            },
+            {
+                "name": "Avondale Flea Market Parking",
+                "total_capacity": 50,
+                "area_type": "lot",
+                "center": (-17.7987, 31.0398),
                 "levels": [],
             },
         ]
@@ -46,44 +53,44 @@ class Command(BaseCommand):
                 total_capacity=area_data["total_capacity"],
                 area_type=area_data["area_type"],
                 boundary=[
-                    {"lat": area_data["center"][0] + random.uniform(-0.0005, 0.0005),
-                     "lng": area_data["center"][1] + random.uniform(-0.0005, 0.0005)}
+                    {"lat": area_data["center"][0] + random.uniform(-0.0004, 0.0004),
+                     "lng": area_data["center"][1] + random.uniform(-0.0004, 0.0004)}
                     for _ in range(4)
                 ]
             )
 
-            # Create levels for garages
+            # Create levels (for garages only)
             levels = []
             for level_name in area_data["levels"]:
                 level = GarageLevel.objects.create(
                     area=area,
                     level_name=level_name,
-                    level_capacity=area_data["total_capacity"] // len(area_data["levels"])
+                    level_capacity=area_data["total_capacity"] // max(1, len(area_data["levels"]))
                 )
                 levels.append(level)
 
-            # Create slots
+            # Create parking slots
             for i in range(1, area.total_capacity + 1):
-                lat = area_data["center"][0] + random.uniform(-0.0008, 0.0008)
-                lng = area_data["center"][1] + random.uniform(-0.0008, 0.0008)
+                lat = area_data["center"][0] + random.uniform(-0.0006, 0.0006)
+                lng = area_data["center"][1] + random.uniform(-0.0006, 0.0006)
                 level = random.choice(levels) if levels else None
                 slot = ParkingSlot.objects.create(
-                    slot_id=f"{area.name[:3].upper()}-{i:03}",
+                    slot_id=f"{area.name.split()[0][:3].upper()}-{i:03}",
                     area=area,
                     level=level,
                     latitude=lat,
                     longitude=lng,
-                    is_handicapped=(i % 12 == 0),
+                    is_handicapped=(i % 15 == 0),
                     reserved_for=random.choice([None, None, "VIP", "Staff"])
                 )
 
-                # Occupancy probability varies by area type
+                # Set realistic occupancy based on area type
                 if area.area_type == "garage":
-                    occupied_chance = 0.75
+                    occupied_chance = 0.7
                 elif area.area_type == "lot":
-                    occupied_chance = 0.6
-                else:
-                    occupied_chance = 0.4
+                    occupied_chance = 0.65
+                else:  # street
+                    occupied_chance = 0.5
 
                 is_occupied = random.random() < occupied_chance
 
@@ -93,4 +100,4 @@ class Command(BaseCommand):
                     timestamp=timezone.now()
                 )
 
-        self.stdout.write(self.style.SUCCESS("✅ Realistic parking data loaded successfully!"))
+        self.stdout.write(self.style.SUCCESS("✅ Avondale Shops parking data loaded successfully!"))
