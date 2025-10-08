@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<!-- Parking Areas Summary -->
+<section class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+    {% for area in areas %}
+    <div class="bg-white shadow-md rounded-lg p-6 transition hover:shadow-xl hover:scale-105">
+        <h2 class="text-xl font-semibold mb-2 text-gray-800">{{ area.name }}</h2>
+        <div class="flex flex-col gap-1">
+            <p>Total Slots: <span class="font-medium text-gray-700">{{ area.total_capacity }}</span></p>
+            <p>Available: <span class="font-medium text-green-600">{{ area.available_slots_count }}</span></p>
+            <p>Occupied: <span class="font-medium text-red-600">{{ area.occupied_slots_count }}</span></p>
+        </div>
+        <div class="mt-4 flex gap-2">
+            <a href="{% url 'parking_area_detail' area.id %}" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition">View Slots</a>
+            <a href="{% url 'find_free_slots' area.id %}" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition">Free Slots</a>
+        </div>
+    </div>
+    {% empty %}
+    <p class="text-center text-gray-500">No parking areas found.</p>
+    {% endfor %}
+</section>
+
+<!-- Map Section -->
+<section class="mt-12">
+    <h2 class="text-2xl font-bold mb-4 text-gray-800">Parking Slots Map</h2>
+    <div id="map" class="w-full h-[500px] rounded-lg shadow-md"></div>
+</section>
+
+<!-- Recent Slot Updates -->
+<section class="mt-12">
+    <h2 class="text-2xl font-bold mb-4 text-gray-800">Recent Slot Updates</h2>
+    <div class="overflow-x-auto rounded-lg shadow-md">
+        <table class="min-w-full bg-white divide-y divide-gray-200">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left text-gray-700 font-medium">Slot</th>
+                    <th class="px-4 py-2 text-left text-gray-700 font-medium">Area</th>
+                    <th class="px-4 py-2 text-left text-gray-700 font-medium">Status</th>
+                    <th class="px-4 py-2 text-left text-gray-700 font-medium">Timestamp</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for status in recent_statuses %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2">{{ status.slot.slot_id }}</td>
+                    <td class="px-4 py-2">{{ status.slot.area.name }}</td>
+                    <td class="px-4 py-2">
+                        {% if status.is_occupied %}
+                        <span class="text-red-600 font-semibold">Occupied</span>
+                        {% else %}
+                        <span class="text-green-600 font-semibold">Empty</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2">{{ status.timestamp|date:"Y-m-d H:i:s" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="px-4 py-4 text-center text-gray-500">No recent updates</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Simulate Nearby Slots -->
+<div class="mt-6 text-center">
+    <button id="simulate-btn" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition shadow-md hover:shadow-lg">
+        Simulate Nearby Slots
+    </button>
+</div>
+
+<!-- Leaflet Map Script -->
+<script>
+    const map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    const markers = {}; // slot_id -> marker
+    const userLines = {}; // slot_id -> polyline
+    let userMarker = null;
+
+    function addMarker(slot) {
+        const color = slot.is_occupied ? 'red' : 'green';
+        if (markers[slot.slot_id]) {
+            markers[slot.slot_id].setStyle({color});
+            markers[slot.slot_id].setPopupContent(`<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`);
+        } else {
+            const marker = L.circleMarker([slot.latitude, slot.longitude], {
+                color,
+                radius: 8,
+                fillOpacity: 0.8
+            }).addTo(map);
+            marker.bindPopup(`<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`);
+            markers[slot.slot_id] = marker;
+        }
+    }
+
+    // Initialize markers from template context
+    {% for area in areas %}
+        {% for slot in area.slots.all %}
+            {% if slot.latitude and slot.longitude %}
+                addMarker({
+                    slot_id: "{{ slot.slot_id }}",
+                    latitude: {{ slot.latitude }},
+                    longitude: {{ slot.longitude }},
+                    area: "{{ slot.area.name }}",
+                    is_occupied: {% if slot.latest_status and slot.latest_status.is_occupied %}true{% else %}false{% endif %}
+                });
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+
+    // Fit map to markers
+    const allCoords = Object.values(markers).map(m => m.getLatLng());
+    if (allCoords.length) map.fitBounds(allCoords, {padding: [50,50]});
+
+    // Detect user location
+    if(navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            userMarker = L.marker([lat,lng], {icon: L.icon({iconUrl:'/static/img/user-icon.png', iconSize:[32,32]})}).addTo(map)
+                .bindPopup("You are here").openPopup();
+            map.setView([lat,lng], 16);
+        });
+    }
+
+    // Simulate Nearby Slots Button
+    document.getElementById('simulate-btn').addEventListener('click', () => {
+        if(!navigator.geolocation){
+            alert("Geolocation not supported");
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            fetch(`/simulate-nearby/?lat=${lat}&lng=${lng}&count=10&radius=2`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.updated_slots && data.updated_slots.length){
+                    data.updated_slots.forEach(slot => {
+                        addMarker({
+                            slot_id: slot.slot_id,
+                            latitude: slot.latitude,
+                            longitude: slot.longitude,
+                            area: slot.area,
+                            is_occupied: slot.status === "Occupied"
+                        });
+
+                        // Draw line from user to updated slot
+                        if(userMarker){
+                            if(userLines[slot.slot_id]) map.removeLayer(userLines[slot.slot_id]);
+                            userLines[slot.slot_id] = L.polyline([userMarker.getLatLng(), markers[slot.slot_id].getLatLng()], {color:'blue', dashArray:'5,5'}).addTo(map);
+                        }
+                    });
+                    alert(`Updated ${data.updated_slots.length} nearby slots!`);
+                } else {
+                    alert(data.message || "No nearby free slots found");
+                }
+            });
+        });
+    });
+</script>
+
+{% endblock %}

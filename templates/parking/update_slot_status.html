@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-lg mx-auto mt-10 bg-white shadow-md rounded-xl p-8 border border-gray-100">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">
+        Update Status for <span class="text-blue-600">{{ slot.slot_id }}</span>
+    </h1>
+
+    <form method="POST" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Occupancy -->
+        <div>
+            <label for="is_occupied" class="block text-gray-700 font-semibold mb-2">Occupancy</label>
+            <select name="is_occupied" id="is_occupied"
+                    class="w-full border-gray-300 rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <option value="true">Occupied</option>
+                <option value="false">Free</option>
+            </select>
+        </div>
+
+        <!-- Sensor ID -->
+        <div>
+            <label for="sensor_id" class="block text-gray-700 font-semibold mb-2">
+                Sensor ID <span class="text-gray-500 font-normal">(optional)</span>
+            </label>
+            <input type="text" name="sensor_id" id="sensor_id"
+                   placeholder="Enter sensor ID"
+                   class="w-full border-gray-300 rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex justify-between items-center mt-8">
+            <a href="{% url 'parking_slot_detail' slot.id %}"
+               class="text-gray-600 hover:text-gray-800 transition">← Back</a>
+            <button type="submit"
+                    class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition">
+                Update Status
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

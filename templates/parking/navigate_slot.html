@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mt-8">
+    <!-- Header Section -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">
+            Navigate to <span class="text-blue-600">{{ slot.slot_id }}</span>
+        </h1>
+        <a href="{% url 'find_free_slots' slot.area.id %}" 
+           class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition">
+           Back to Free Slots
+        </a>
+    </div>
+
+    <!-- Map Card -->
+    <div class="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+        <div id="map" class="w-full h-[500px]"></div>
+    </div>
+
+    <!-- Occupy Slot Action -->
+    <div class="mt-6 flex justify-end">
+        <a href="{% url 'update_slot_status' slot.id %}" 
+           class="inline-flex items-center bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" 
+                 viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" 
+                      d="M5 13l4 4L19 7" />
+            </svg>
+            Occupy This Slot
+        </a>
+    </div>
+</div>
+
+<!-- Leaflet & Routing Scripts -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"
+/>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // Initialize map centered on the slot
+    var map = L.map('map').setView([{{ slot.latitude }}, {{ slot.longitude }}], 15);
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
+
+    // Parking slot marker
+    var slotMarker = L.marker([{{ slot.latitude }}, {{ slot.longitude }}]).addTo(map)
+        .bindPopup("<b>{{ slot.slot_id }}</b><br>Destination").openPopup();
+
+    // Try to get user location
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function (position) {
+                var userLat = position.coords.latitude;
+                var userLng = position.coords.longitude;
+
+                // Add user marker
+                var userMarker = L.marker([userLat, userLng]).addTo(map)
+                    .bindPopup("You are here").openPopup();
+
+                // Fit map to both points
+                var group = new L.featureGroup([userMarker, slotMarker]);
+                map.fitBounds(group.getBounds(), { padding: [50, 50] });
+
+                // Draw route using Leaflet Routing Machine
+                L.Routing.control({
+                    waypoints: [
+                        L.latLng(userLat, userLng),
+                        L.latLng({{ slot.latitude }}, {{ slot.longitude }})
+                    ],
+                    lineOptions: {
+                        styles: [{ color: '#2563eb', weight: 5, opacity: 0.8 }]
+                    },
+                    routeWhileDragging: false,
+                    show: false,
+                    addWaypoints: false,
+                    draggableWaypoints: false,
+                    createMarker: function() { return null; } // hide default markers
+                }).addTo(map);
+            },
+            function (err) {
+                console.warn("Geolocation error:", err);
+                map.setView([{{ slot.latitude }}, {{ slot.longitude }}], 17);
+            }
+        );
+    } else {
+        console.log("Geolocation not supported");
+        map.setView([{{ slot.latitude }}, {{ slot.longitude }}], 17);
+    }
+});
+</script>
+{% endblock %}

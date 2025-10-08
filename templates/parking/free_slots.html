@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mt-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">Free Slots in {{ area.name }}</h1>
+        <a href="{% url 'parking_area_detail' area.id %}" 
+           class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition">
+           Back to Area
+        </a>
+    </div>
+
+    <!-- Table Card -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="py-3 px-4 text-left text-gray-700 font-semibold uppercase text-sm">Slot ID</th>
+                    <th class="py-3 px-4 text-left text-gray-700 font-semibold uppercase text-sm">Handicapped</th>
+                    <th class="py-3 px-4 text-left text-gray-700 font-semibold uppercase text-sm">Reserved For</th>
+                    <th class="py-3 px-4 text-left text-gray-700 font-semibold uppercase text-sm">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for slot in slots %}
+                <tr class="hover:bg-gray-50 transition">
+                    <td class="py-3 px-4 font-medium text-gray-800">{{ slot.slot_id }}</td>
+                    <td class="py-3 px-4">
+                        {% if slot.is_handicapped %}
+                            <span class="text-blue-600 font-semibold">Yes</span>
+                        {% else %}
+                            <span class="text-gray-600">No</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4 text-gray-700">
+                        {{ slot.reserved_for|default:"-" }}
+                    </td>
+                    <td class="py-3 px-4">
+                        <a href="{% url 'navigate_slot' slot.id %}"
+                           class="inline-flex items-center bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition">
+                            Navigate
+                            <svg xmlns="http://www.w3.org/2000/svg" 
+                                 class="h-4 w-4 ml-1" 
+                                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" 
+                                      d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="py-6 text-center text-gray-500">
+                        No free slots available
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
