@@ -43,10 +43,19 @@
         <a href="{% url 'parking_area_detail' slot.area.id %}"
            class="text-gray-600 hover:text-gray-800 transition">← Back to Slots</a>
 
-        <a href="{% url 'update_slot_status' slot.id %}"
-           class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow hover:bg-blue-700 transition">
-            Update Status
-        </a>
+       {% if latest_status and latest_status.is_occupied %}
+    <!-- Show Leave Slot button -->
+    <a href="{% url 'leave_slot' slot.id %}"
+       class="bg-red-600 text-white px-5 py-2 rounded-lg shadow hover:bg-red-700 transition">
+        Leave Slot
+    </a>
+{% else %}
+    <!-- Show Occupy Slot button -->
+    <a href="{% url 'update_slot_status' slot.id %}"
+       class="bg-green-600 text-white px-5 py-2 rounded-lg shadow hover:bg-green-700 transition">
+        Occupy Slot
+    </a>
+{% endif %}
     </div>
 </div>
 {% endblock %}

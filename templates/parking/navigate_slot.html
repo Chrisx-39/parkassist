@@ -47,8 +47,12 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    // Slot coordinates from server
+    const slotLat = {{ slot.latitude|default:"0" }};
+    const slotLng = {{ slot.longitude|default:"0" }};
+
     // Initialize map centered on the slot
-    var map = L.map('map').setView([{{ slot.latitude }}, {{ slot.longitude }}], 15);
+    var map = L.map('map').setView([slotLat, slotLng], 15);
 
     // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -56,49 +60,62 @@ document.addEventListener("DOMContentLoaded", function () {
     }).addTo(map);
 
     // Parking slot marker
-    var slotMarker = L.marker([{{ slot.latitude }}, {{ slot.longitude }}]).addTo(map)
-        .bindPopup("<b>{{ slot.slot_id }}</b><br>Destination").openPopup();
+    var slotMarker = L.marker([slotLat, slotLng]).addTo(map)
+        .bindPopup("<b>{{ slot.slot_id }}</b><br>Destination");
 
-    // Try to get user location
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            function (position) {
-                var userLat = position.coords.latitude;
-                var userLng = position.coords.longitude;
-
-                // Add user marker
-                var userMarker = L.marker([userLat, userLng]).addTo(map)
-                    .bindPopup("You are here").openPopup();
-
-                // Fit map to both points
-                var group = new L.featureGroup([userMarker, slotMarker]);
-                map.fitBounds(group.getBounds(), { padding: [50, 50] });
-
-                // Draw route using Leaflet Routing Machine
-                L.Routing.control({
-                    waypoints: [
-                        L.latLng(userLat, userLng),
-                        L.latLng({{ slot.latitude }}, {{ slot.longitude }})
-                    ],
-                    lineOptions: {
-                        styles: [{ color: '#2563eb', weight: 5, opacity: 0.8 }]
-                    },
-                    routeWhileDragging: false,
-                    show: false,
-                    addWaypoints: false,
-                    draggableWaypoints: false,
-                    createMarker: function() { return null; } // hide default markers
-                }).addTo(map);
-            },
-            function (err) {
-                console.warn("Geolocation error:", err);
-                map.setView([{{ slot.latitude }}, {{ slot.longitude }}], 17);
-            }
-        );
-    } else {
-        console.log("Geolocation not supported");
-        map.setView([{{ slot.latitude }}, {{ slot.longitude }}], 17);
+    // Helper: read URL query param
+    function getQueryParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
     }
+
+    // Determine simulated origin:
+    // 1) If lat & lng passed via query params, use them.
+    // 2) Otherwise generate a nearby point (small offset from slot).
+    let userLat = parseFloat(getQueryParam('lat'));
+    let userLng = parseFloat(getQueryParam('lng'));
+
+    if (!isFinite(userLat) || !isFinite(userLng)) {
+        // fixed nearby offset (approx 50-200 meters)
+        // you can tweak these offsets to change starting distance/direction
+        const offsetLat = 0.0008;  // ~89m
+        const offsetLng = 0.0007;  // ~73m
+        // Randomize sign slightly so the origin is not always the same side
+        const signLat = Math.random() < 0.5 ? -1 : 1;
+        const signLng = Math.random() < 0.5 ? -1 : 1;
+
+        userLat = slotLat + (signLat * (Math.random() * offsetLat));
+        userLng = slotLng + (signLng * (Math.random() * offsetLng));
+    }
+
+    // Add a simulated "You are here" marker
+    var userMarker = L.marker([userLat, userLng], {
+        icon: L.icon({
+            iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+        })
+    }).addTo(map).bindPopup("Simulated origin").openPopup();
+
+    // Fit map to both points with padding
+    var group = new L.featureGroup([userMarker, slotMarker]);
+    map.fitBounds(group.getBounds(), { padding: [50, 50] });
+
+    // Draw route using Leaflet Routing Machine from simulated origin -> slot
+    L.Routing.control({
+        waypoints: [
+            L.latLng(userLat, userLng),
+            L.latLng(slotLat, slotLng)
+        ],
+        lineOptions: {
+            styles: [{ color: '#2563eb', weight: 5, opacity: 0.8 }]
+        },
+        routeWhileDragging: false,
+        show: false,
+        addWaypoints: false,
+        draggableWaypoints: false,
+        createMarker: function() { return null; } // hide default markers
+    }).addTo(map);
 });
 </script>
 {% endblock %}

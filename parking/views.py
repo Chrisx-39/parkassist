@@ -170,3 +170,28 @@ def simulate_nearby_slots(request):
         })
 
     return JsonResponse({"updated_slots": updated_slots})
+
+
+# -------------------------
+# Leave / Free Slot
+# -------------------------
+def leave_slot(request, slot_id):
+    slot = get_object_or_404(ParkingSlot, pk=slot_id)
+
+    if request.method == 'POST':
+        sensor_id = request.POST.get('sensor_id', None)
+        sensor = None
+        if sensor_id:
+            sensor, _ = Sensor.objects.get_or_create(sensor_id=sensor_id, slot=slot)
+
+        # Create a new SlotStatus marking it as free
+        SlotStatus.objects.create(
+            slot=slot,
+            is_occupied=False,  # Mark as free
+            sensor=sensor,
+            timestamp=timezone.now()
+        )
+
+        return HttpResponseRedirect(reverse('parking_slot_detail', args=[slot.id]))
+
+    return render(request, 'parking/leave_slot.html', {'slot': slot})

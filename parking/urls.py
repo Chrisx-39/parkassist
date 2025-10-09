@@ -39,4 +39,6 @@ urlpatterns = [
 
     path('simulate-nearby/', views.simulate_nearby_slots, name='simulate_nearby_slots'),
 
+     path('leave_slot/<int:slot_id>/', views.leave_slot, name='leave_slot'),
+
 ]

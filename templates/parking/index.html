@@ -23,8 +23,15 @@
 </section>
 
 <!-- Map Section -->
-<section class="mt-12">
-    <h2 class="text-2xl font-bold mb-4 text-gray-800">Parking Slots Map</h2>
+<section class="mt-12 relative">
+    <h2 class="text-2xl font-bold mb-4 text-gray-800">Parking Slots Map (Avondale Shops)</h2>
+
+    <!-- Floating toggle button -->
+    <button id="toggle-map-btn" 
+        class="absolute z-50 top-2 right-2 bg-white shadow-md px-4 py-2 rounded-md hover:bg-gray-100 transition">
+        Switch to OSM
+    </button>
+
     <div id="map" class="w-full h-[500px] rounded-lg shadow-md"></div>
 </section>
 
@@ -72,32 +79,59 @@
     </button>
 </div>
 
-<!-- Leaflet Map Script -->
+<!-- Leaflet & ESRI Map Integration -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
-    const map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    // Fixed starting location: Avondale Shops
+    const startLat = -17.80316172143422;
+    const startLng = 31.03789527991053;
 
-    const markers = {}; // slot_id -> marker
-    const userLines = {}; // slot_id -> polyline
-    let userMarker = null;
+    // Initialize map
+    const map = L.map('map').setView([startLat, startLng], 18);
 
+    // Define tile layers
+    const esriLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 
+        { maxZoom: 20, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' }
+    );
+
+    const osmLayer = L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', 
+        { maxZoom: 19, attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors' }
+    );
+
+    // Start with ESRI
+    esriLayer.addTo(map);
+    let currentLayer = 'esri';
+
+    // Map markers and polylines
+    const markers = {};
+    const userLines = {};
+
+    // Add or update slot marker
     function addMarker(slot) {
-        const color = slot.is_occupied ? 'red' : 'green';
+        const color = slot.is_occupied ? 'red' : 'limegreen';
         if (markers[slot.slot_id]) {
-            markers[slot.slot_id].setStyle({color});
-            markers[slot.slot_id].setPopupContent(`<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`);
+            markers[slot.slot_id].setStyle({ color });
+            markers[slot.slot_id].setPopupContent(
+                `<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`
+            );
         } else {
             const marker = L.circleMarker([slot.latitude, slot.longitude], {
                 color,
                 radius: 8,
                 fillOpacity: 0.8
             }).addTo(map);
-            marker.bindPopup(`<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`);
+            marker.bindPopup(
+                `<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`
+            );
             markers[slot.slot_id] = marker;
         }
     }
 
-    // Initialize markers from template context
+    // Load all slots from context
     {% for area in areas %}
         {% for slot in area.slots.all %}
             {% if slot.latitude and slot.longitude %}
@@ -112,35 +146,22 @@
         {% endfor %}
     {% endfor %}
 
-    // Fit map to markers
-    const allCoords = Object.values(markers).map(m => m.getLatLng());
-    if (allCoords.length) map.fitBounds(allCoords, {padding: [50,50]});
-
-    // Detect user location
-    if(navigator.geolocation){
-        navigator.geolocation.getCurrentPosition(pos => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            userMarker = L.marker([lat,lng], {icon: L.icon({iconUrl:'/static/img/user-icon.png', iconSize:[32,32]})}).addTo(map)
-                .bindPopup("You are here").openPopup();
-            map.setView([lat,lng], 16);
-        });
-    }
-
-    // Simulate Nearby Slots Button
+    // Handle simulation button
     document.getElementById('simulate-btn').addEventListener('click', () => {
-        if(!navigator.geolocation){
-            alert("Geolocation not supported");
-            return;
-        }
-        navigator.geolocation.getCurrentPosition(pos => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
+        const lat = startLat + (Math.random() * 0.002 - 0.001);
+        const lng = startLng + (Math.random() * 0.002 - 0.001);
 
-            fetch(`/simulate-nearby/?lat=${lat}&lng=${lng}&count=10&radius=2`)
+        fetch(`/simulate-nearby/?lat=${lat}&lng=${lng}&count=10&radius=2`)
             .then(res => res.json())
             .then(data => {
-                if(data.updated_slots && data.updated_slots.length){
+                if (data.updated_slots && data.updated_slots.length) {
+                    const userMarker = L.marker([lat, lng], {
+                        icon: L.icon({
+                            iconUrl: '/static/img/user-icon.png',
+                            iconSize: [32, 32]
+                        })
+                    }).addTo(map).bindPopup("Simulated User Location").openPopup();
+
                     data.updated_slots.forEach(slot => {
                         addMarker({
                             slot_id: slot.slot_id,
@@ -150,19 +171,35 @@
                             is_occupied: slot.status === "Occupied"
                         });
 
-                        // Draw line from user to updated slot
-                        if(userMarker){
-                            if(userLines[slot.slot_id]) map.removeLayer(userLines[slot.slot_id]);
-                            userLines[slot.slot_id] = L.polyline([userMarker.getLatLng(), markers[slot.slot_id].getLatLng()], {color:'blue', dashArray:'5,5'}).addTo(map);
-                        }
+                        userLines[slot.slot_id] = L.polyline(
+                            [userMarker.getLatLng(), markers[slot.slot_id].getLatLng()],
+                            { color: 'blue', dashArray: '5,5' }
+                        ).addTo(map);
                     });
-                    alert(`Updated ${data.updated_slots.length} nearby slots!`);
+
+                    alert(`✅ Updated ${data.updated_slots.length} nearby slots!`);
                 } else {
-                    alert(data.message || "No nearby free slots found");
+                    alert(data.message || "No nearby free slots found.");
                 }
-            });
-        });
+            })
+            .catch(() => alert("Error simulating nearby slots."));
     });
+
+    // Handle map toggle button
+    document.getElementById('toggle-map-btn').addEventListener('click', () => {
+        if(currentLayer === 'esri'){
+            map.removeLayer(esriLayer);
+            osmLayer.addTo(map);
+            currentLayer = 'osm';
+            document.getElementById('toggle-map-btn').innerText = "Switch to ESRI";
+        } else {
+            map.removeLayer(osmLayer);
+            esriLayer.addTo(map);
+            currentLayer = 'esri';
+            document.getElementById('toggle-map-btn').innerText = "Switch to OSM";
+        }
+    });
+
 </script>
 
 {% endblock %}
