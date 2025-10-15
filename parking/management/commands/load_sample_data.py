@@ -4,18 +4,19 @@ from django.utils import timezone
 import random
 import math
 
+
 class Command(BaseCommand):
-    help = "Load Avondale Mall parking data (A–F) with realistic slot offsets distributed within each polygon."
+    help = "Load Avondale Mall parking data (A–F) in circular slot layout with variable slot counts."
 
     def handle(self, *args, **kwargs):
-        self.stdout.write("🅿️ Loading Avondale parking spots A–F with improved slot offsets...")
+        self.stdout.write("🅿️ Loading Avondale parking spots A–F (circular layout)...")
 
         # Clear existing data
         SlotStatus.objects.all().delete()
         ParkingSlot.objects.all().delete()
         ParkingArea.objects.all().delete()
 
-        # --- Exact polygon boundaries (converted from DMS to decimal) ---
+        # --- Polygon boundaries (for reference and centroid calculation) ---
         parking_areas = {
             "A": [
                 (-17.802552777777777, 31.038430555555557),
@@ -56,64 +57,63 @@ class Command(BaseCommand):
         }
 
         def centroid(points):
-            """Compute centroid (average of vertices)."""
+            """Return centroid (average of coordinates)."""
             lat = sum(p[0] for p in points) / len(points)
             lng = sum(p[1] for p in points) / len(points)
             return lat, lng
 
-        def interpolate(p1, p2, t):
-            """Linear interpolation between two points."""
-            return (p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t)
-
-        # --- Create areas & slots ---
+        # --- Create circular slots around centroid ---
         for label, corners in parking_areas.items():
+            # Define slot count
+            if label == "F":
+                total_slots = 8
+            else:
+                total_slots = 14
+
+            # Compute area centroid
+            center_lat, center_lng = centroid(corners)
+
+            # Radius of circular layout (small variations)
+            base_radius = 0.0001 + random.uniform(-0.00002, 0.00002)
+
+            # Create area
             area = ParkingArea.objects.create(
                 name=f"Avondale Spot {label}",
-                total_capacity=12,
+                total_capacity=total_slots,
                 area_type="lot",
-                boundary=[{"lat": lat, "lng": lng} for lat, lng in corners]
+                boundary=[{"lat": lat, "lng": lng} for lat, lng in corners],
             )
 
-            self.stdout.write(f"Created area {area.name} with {len(corners)} corners.")
+            self.stdout.write(f"Created area {area.name} with {total_slots} circular slots.")
 
-            # We’ll create 3x4 grid slots across two polygon edges
-            edge_bottom = [corners[0], corners[1]]
-            edge_top = [corners[3], corners[2]]
+            # Distribute slots evenly around 360 degrees
+            for i in range(total_slots):
+                angle_deg = (360 / total_slots) * i
+                angle_rad = math.radians(angle_deg)
 
-            slot_index = 1
-            rows, cols = 3, 4
-            for r in range(rows):
-                row_t = r / (rows - 1)
-                start_row = interpolate(edge_bottom[0], edge_top[0], row_t)
-                end_row = interpolate(edge_bottom[1], edge_top[1], row_t)
+                # Add slight random offset to radius and angle
+                r = base_radius + random.uniform(-0.000015, 0.000015)
+                jitter_angle = random.uniform(-5, 5)
+                angle_rad += math.radians(jitter_angle)
 
-                for c in range(cols):
-                    col_t = c / (cols - 1)
-                    lat, lng = interpolate(start_row, end_row, col_t)
+                lat = center_lat + (r * math.cos(angle_rad))
+                lng = center_lng + (r * math.sin(angle_rad))
 
-                    # Small jitter: random few meters offset
-                    lat += random.uniform(-0.000015, 0.000015)
-                    lng += random.uniform(-0.000015, 0.000015)
+                slot = ParkingSlot.objects.create(
+                    slot_id=f"AVM-{label}-{i+1:02}",
+                    area=area,
+                    latitude=lat,
+                    longitude=lng,
+                    is_handicapped=((i + 1) % total_slots == 0),
+                    reserved_for=random.choice([None, None, "VIP", "Staff"]),
+                )
 
-                    slot = ParkingSlot.objects.create(
-                        slot_id=f"AVM-{label}-{slot_index:02}",
-                        area=area,
-                        latitude=lat,
-                        longitude=lng,
-                        is_handicapped=(slot_index % 12 == 0),
-                        reserved_for=random.choice([None, None, "VIP", "Staff"])
-                    )
+                SlotStatus.objects.create(
+                    slot=slot,
+                    is_occupied=random.random() < 0.55,
+                    timestamp=timezone.now(),
+                )
 
-                    # Initial occupancy (~55%)
-                    occupied = random.random() < 0.55
-                    SlotStatus.objects.create(
-                        slot=slot,
-                        is_occupied=occupied,
-                        timestamp=timezone.now()
-                    )
+            self.stdout.write(self.style.SUCCESS(f"✅ {area.name}: {total_slots} slots arranged in a circle."))
 
-                    slot_index += 1
-
-            self.stdout.write(self.style.SUCCESS(f"✅ {area.name}: {slot_index - 1} slots placed neatly."))
-
-        self.stdout.write(self.style.SUCCESS("🎯 Avondale precise parking data with better offsets loaded successfully!"))
+        self.stdout.write(self.style.SUCCESS("🎯 Circular Avondale parking data loaded successfully!"))

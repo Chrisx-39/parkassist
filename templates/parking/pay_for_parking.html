@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="text-3xl font-bold mb-4">Pay for Parking - Slot {{ session.slot.slot_id }}</h1>
+<p>Start: {{ session.start_time|date:"Y-m-d H:i:s" }}</p>
+<p>End: {{ session.end_time|date:"Y-m-d H:i:s" }}</p>
+<p>Amount Due: <strong>${{ session.amount_due }}</strong></p>
+
+<form method="POST">
+    {% csrf_token %}
+    <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700">Pay Now</button>
+</form>
+{% endblock %}

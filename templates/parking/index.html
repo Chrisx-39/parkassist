@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block content %}
 
@@ -84,122 +85,111 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // Fixed starting location: Avondale Shops
-    const startLat = -17.80316172143422;
-    const startLng = 31.03789527991053;
+const startLat = -17.80316172143422;
+const startLng = 31.03789527991053;
+const map = L.map('map').setView([startLat, startLng], 18);
 
-    // Initialize map
-    const map = L.map('map').setView([startLat, startLng], 18);
+const esriLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 
+    { maxZoom: 20, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' }
+);
+const osmLayer = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', 
+    { maxZoom: 19, attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors' }
+);
+esriLayer.addTo(map);
+let currentLayer = 'esri';
 
-    // Define tile layers
-    const esriLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 
-        { maxZoom: 20, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' }
-    );
+const markers = {};
+const userLines = {};
 
-    const osmLayer = L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', 
-        { maxZoom: 19, attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors' }
-    );
-
-    // Start with ESRI
-    esriLayer.addTo(map);
-    let currentLayer = 'esri';
-
-    // Map markers and polylines
-    const markers = {};
-    const userLines = {};
-
-    // Add or update slot marker
-    function addMarker(slot) {
-        const color = slot.is_occupied ? 'red' : 'limegreen';
-        if (markers[slot.slot_id]) {
-            markers[slot.slot_id].setStyle({ color });
-            markers[slot.slot_id].setPopupContent(
-                `<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`
-            );
-        } else {
-            const marker = L.circleMarker([slot.latitude, slot.longitude], {
-                color,
-                radius: 8,
-                fillOpacity: 0.8
-            }).addTo(map);
-            marker.bindPopup(
-                `<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`
-            );
-            markers[slot.slot_id] = marker;
-        }
+function addMarker(slot) {
+    const color = slot.is_occupied ? 'red' : 'limegreen';
+    if (markers[slot.slot_id]) {
+        markers[slot.slot_id].setStyle({ color });
+        markers[slot.slot_id].setPopupContent(
+            `<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`
+        );
+    } else {
+        const marker = L.circleMarker([slot.latitude, slot.longitude], {
+            color,
+            radius: 8,
+            fillOpacity: 0.8
+        }).addTo(map);
+        marker.bindPopup(
+            `<b>${slot.slot_id}</b><br>Area: ${slot.area}<br>Status: ${slot.is_occupied ? "Occupied" : "Available"}`
+        );
+        markers[slot.slot_id] = marker;
     }
+}
 
-    // Load all slots from context
-    {% for area in areas %}
-        {% for slot in area.slots.all %}
-            {% if slot.latitude and slot.longitude %}
-                addMarker({
-                    slot_id: "{{ slot.slot_id }}",
-                    latitude: {{ slot.latitude }},
-                    longitude: {{ slot.longitude }},
-                    area: "{{ slot.area.name }}",
-                    is_occupied: {% if slot.latest_status and slot.latest_status.is_occupied %}true{% else %}false{% endif %}
-                });
-            {% endif %}
-        {% endfor %}
+// Add all slots
+{% for area in areas %}
+    {% for slot in area.slots.all %}
+        {% if slot.latitude and slot.longitude %}
+        addMarker({
+            slot_id: "{{ slot.slot_id }}",
+            latitude: {{ slot.latitude }},
+            longitude: {{ slot.longitude }},
+            area: "{{ slot.area.name }}",
+            is_occupied: {% if slot.latest_status and slot.latest_status.is_occupied %}true{% else %}false{% endif %}
+        });
+        {% endif %}
     {% endfor %}
+{% endfor %}
 
-    // Handle simulation button
-    document.getElementById('simulate-btn').addEventListener('click', () => {
-        const lat = startLat + (Math.random() * 0.002 - 0.001);
-        const lng = startLng + (Math.random() * 0.002 - 0.001);
+// Simulation
+document.getElementById('simulate-btn').addEventListener('click', () => {
+    const lat = startLat + (Math.random() * 0.002 - 0.001);
+    const lng = startLng + (Math.random() * 0.002 - 0.001);
 
-        fetch(`/simulate-nearby/?lat=${lat}&lng=${lng}&count=10&radius=2`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.updated_slots && data.updated_slots.length) {
-                    const userMarker = L.marker([lat, lng], {
-                        icon: L.icon({
-                            iconUrl: '/static/img/user-icon.png',
-                            iconSize: [32, 32]
-                        })
-                    }).addTo(map).bindPopup("Simulated User Location").openPopup();
+    fetch(`/simulate-nearby/?lat=${lat}&lng=${lng}&count=10&radius=2`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.updated_slots && data.updated_slots.length) {
+                const userMarker = L.marker([lat, lng], {
+                    icon: L.icon({
+                        iconUrl: "{% static 'img/user-icon.png' %}",
+                        iconSize: [32, 32]
+                    })
+                }).addTo(map).bindPopup("Simulated User Location").openPopup();
 
-                    data.updated_slots.forEach(slot => {
-                        addMarker({
-                            slot_id: slot.slot_id,
-                            latitude: slot.latitude,
-                            longitude: slot.longitude,
-                            area: slot.area,
-                            is_occupied: slot.status === "Occupied"
-                        });
-
-                        userLines[slot.slot_id] = L.polyline(
-                            [userMarker.getLatLng(), markers[slot.slot_id].getLatLng()],
-                            { color: 'blue', dashArray: '5,5' }
-                        ).addTo(map);
+                data.updated_slots.forEach(slot => {
+                    addMarker({
+                        slot_id: slot.slot_id,
+                        latitude: slot.latitude,
+                        longitude: slot.longitude,
+                        area: slot.area,
+                        is_occupied: slot.status === "Occupied"
                     });
+                    userLines[slot.slot_id] = L.polyline(
+                        [userMarker.getLatLng(), markers[slot.slot_id].getLatLng()],
+                        { color: 'blue', dashArray: '5,5' }
+                    ).addTo(map);
+                });
 
-                    alert(`✅ Updated ${data.updated_slots.length} nearby slots!`);
-                } else {
-                    alert(data.message || "No nearby free slots found.");
-                }
-            })
-            .catch(() => alert("Error simulating nearby slots."));
-    });
+                alert(`✅ Updated ${data.updated_slots.length} nearby slots!`);
+            } else {
+                alert(data.message || "No nearby free slots found.");
+            }
+        })
+        .catch(() => alert("Error simulating nearby slots."));
+});
 
-    // Handle map toggle button
-    document.getElementById('toggle-map-btn').addEventListener('click', () => {
-        if(currentLayer === 'esri'){
-            map.removeLayer(esriLayer);
-            osmLayer.addTo(map);
-            currentLayer = 'osm';
-            document.getElementById('toggle-map-btn').innerText = "Switch to ESRI";
-        } else {
-            map.removeLayer(osmLayer);
-            esriLayer.addTo(map);
-            currentLayer = 'esri';
-            document.getElementById('toggle-map-btn').innerText = "Switch to OSM";
-        }
-    });
-
+// Map toggle
+document.getElementById('toggle-map-btn').addEventListener('click', () => {
+    if(currentLayer === 'esri'){
+        map.removeLayer(esriLayer);
+        osmLayer.addTo(map);
+        currentLayer = 'osm';
+        document.getElementById('toggle-map-btn').innerText = "Switch to ESRI";
+    } else {
+        map.removeLayer(osmLayer);
+        esriLayer.addTo(map);
+        currentLayer = 'esri';
+        document.getElementById('toggle-map-btn').innerText = "Switch to OSM";
+    }
+});
 </script>
 
 {% endblock %}
